@@ -75,9 +75,9 @@ export default function IngredientForm({ onClose, onSuccess }: IngredientFormPro
                         >
                             <option value="">Seleccionar...</option>
                             <option value="gramo">gramo</option>
-                            <option value="kilo">kilogramo</option>
-                            <option value="litro">litro</option>
                             <option value="mililitro">mililitro</option>
+                            {/* <option value="kilo">kilogramo</option> */}
+                            {/* <option value="litro">litro</option> */}
                         </select>
                     </div>
 

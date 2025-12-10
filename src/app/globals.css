@@ -1,10 +1,10 @@
 :root {
   /* Colors */
-  --primary: #d4af37; /* Gold */
-  --primary-dark: #aa8c2c;
+  --primary: #76c893; /* Light Green */
+  --primary-dark: #52b788;
   --secondary: #1a1a1a; /* Dark Black/Gray */
   --secondary-light: #333333;
-  --background: #f9f9f9;
+  --background: #f5f7fa;
   --surface: #ffffff;
   --text: #1a1a1a;
   --text-light: #666666;

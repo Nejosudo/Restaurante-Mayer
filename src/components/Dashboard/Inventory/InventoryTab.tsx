@@ -131,9 +131,9 @@ export default function InventoryTab() {
                       style={{ width: '80px', padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }}
                     >
                       <option value="gramo">gramo</option>
-                      <option value="kilo">kilogramo</option>
-                      <option value="litro">litro</option>
                       <option value="mililitro">mililitro</option>
+                      {/* <option value="kilo">kilogramo</option> */}
+                      {/* <option value="litro">litro</option> */}
                     </select>
                   </div>
 
