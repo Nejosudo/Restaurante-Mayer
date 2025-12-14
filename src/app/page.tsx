@@ -27,7 +27,7 @@ export default async function Home() {
       <Navbar />
       <section className="container" style={{ padding: '4rem 0', textAlign: 'center' }}>
         <h1 style={{ fontSize: '3rem', color: 'var(--primary)', marginBottom: '1rem' }}>
-          Restaurante May
+          Restaurante Mayer
         </h1>
         <p style={{ fontSize: '1.2rem', color: 'var(--text-light)' }}>
           Experiencia gastronómica de elegancia y sabor.
