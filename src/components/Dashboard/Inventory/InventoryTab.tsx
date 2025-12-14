@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash, Save, X, ChefHat } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
@@ -17,15 +16,16 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
   const [products, setProducts] = useState<any[]>([]); // Changed to any to accommodate calculating costs dynamically
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isProductFormOpen, setIsProductFormOpen] = useState(false);
+  const [isIngredientFormOpen, setIsIngredientFormOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null); // For editing products
   const [editingIngredientId, setEditingIngredientId] = useState<string | null>(null);
-  const [editCost, setEditCost] = useState('');
   
-  // New state for adding ingredients
-  const [newIngredientName, setNewIngredientName] = useState('');
-  const [newIngredientUnit, setNewIngredientUnit] = useState('gramo');
-  const [newIngredientCost, setNewIngredientCost] = useState('');
-  const [showAddIngredient, setShowAddIngredient] = useState(false);
+  // State for inline editing of ingredients
+  const [editValues, setEditValues] = useState({
+    unit: 'gramo',
+    cost: '',
+    stock: ''
+  });
 
   useEffect(() => {
     fetchData();
@@ -144,25 +144,6 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
       fetchData();
     }
   };
-  
-  const handleCreateIngredient = async () => {
-    if (!newIngredientName || !newIngredientCost) return;
-    const { error } = await supabase.from('ingredients').insert({
-      name: newIngredientName,
-      unit: newIngredientUnit,
-      cost_per_unit: parseFloat(newIngredientCost),
-      stock: 0
-    });
-    
-    if (!error) {
-      setNewIngredientName('');
-      setNewIngredientCost('');
-      setShowAddIngredient(false);
-      fetchData();
-    } else {
-      alert('Error al crear ingrediente');
-    }
-  };
 
   const handleEditProduct = (id: string) => {
     setEditingProductId(id);
@@ -171,7 +152,7 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-      {/* Left Column: Products */}
+      {/* Products Column */}
       {mode === 'products' && (
       <div style={{ gridColumn: 'span 2' }}>
         <div className={styles.orderHeader}>
@@ -182,7 +163,7 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
             onClick={() => {
               setEditingProductId(null);
               setIsProductFormOpen(true);
-            }} // New Product
+            }} 
           >
             <Plus size={16} style={{ marginRight: 8 }} /> Nuevo
           </button>
@@ -205,7 +186,7 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <button 
-                  className={styles.qtyBtn} // Reusing qtyBtn style for simplicity
+                  className={styles.qtyBtn}
                   style={{ color: '#555', borderColor: '#ccc' }}
                   onClick={() => handleEditProduct(product.id)}
                   title="Editar"
@@ -221,21 +202,15 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
                   <Trash size={16} />
                 </button>
               </div>
-              <button
-                className={styles.qtyBtn}
-                style={{ color: 'var(--error)', borderColor: 'var(--error)' }}
-                onClick={() => handleDeleteProduct(product.id)}
-              >
-                <Trash size={16} />
-              </button>
             </div>
           ))}
         </div>
       </div>
       )}
 
-      {/* Right Column: Ingredients */}
-      <div>
+      {/* Ingredients Column */}
+      {mode === 'ingredients' && (
+      <div style={{ gridColumn: 'span 2' }}>
         <div className={styles.orderHeader}>
           <h2 className={styles.sectionTitle} style={{ margin: 0, border: 0 }}>Ingredientes</h2>
           <button
@@ -332,90 +307,8 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
                   </div>
                 </>
               )}
-      {/* Ingredients Mode */}
-      {mode === 'ingredients' && (
-      <div style={{ gridColumn: 'span 2' }}>
-        <div>
-          <div className={styles.orderHeader}>
-            <h2 className={styles.sectionTitle} style={{ margin: 0, border: 0 }}>Ingredientes</h2>
-            <button 
-              className="btn" 
-              style={{ padding: '8px 16px', fontSize: '0.9rem', backgroundColor: '#f0f0f0' }}
-              onClick={() => setShowAddIngredient(!showAddIngredient)}
-            >
-              <Plus size={16} style={{ marginRight: 8 }} /> Agregrar
-            </button>
-          </div>
-
-          {showAddIngredient && (
-            <div className={styles.orderCard} style={{ marginBottom: '1rem', padding: '1rem', border: '1px solid var(--primary)' }}>
-              <h4>Nuevo Ingrediente</h4>
-              <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <input 
-                  type="text" placeholder="Nombre" 
-                  value={newIngredientName} onChange={e => setNewIngredientName(e.target.value)} 
-                  className={styles.input} 
-                />
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <select 
-                    value={newIngredientUnit} 
-                    onChange={e => setNewIngredientUnit(e.target.value)}
-                    className={styles.input}
-                  >
-                    <option value="gramo">Gramo (g)</option>
-                    <option value="mililitro">Mililitro (ml)</option>
-                    <option value="unidad">Unidad (u)</option>
-                  </select>
-                  <input 
-                    type="number" placeholder="Costo por unidad" 
-                    value={newIngredientCost} onChange={e => setNewIngredientCost(e.target.value)} 
-                    className={styles.input} 
-                  />
-                </div>
-                <button className="btn btn-primary" onClick={handleCreateIngredient}>Guardar</button>
-              </div>
             </div>
-          )}
-
-          <div style={{ display: 'grid', gap: '0.5rem' }}>
-            {ingredients.map(ing => (
-              <div key={ing.id} className={styles.orderCard} style={{ padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{ing.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#666' }}>Unidad: {ing.unit}</div>
-                </div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {editingIngredientId === ing.id ? (
-                    <>
-                      <input 
-                        type="number" 
-                        value={editCost} 
-                        onChange={e => setEditCost(e.target.value)}
-                        style={{ width: '80px', padding: '4px' }}
-                        autoFocus
-                      />
-                      <button onClick={() => handleUpdateIngredientCost(ing.id)} style={{ color: 'green' }}><Save size={16} /></button>
-                      <button onClick={() => setEditingIngredientId(null)} style={{ color: 'red' }}><X size={16} /></button>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ fontWeight: 'bold' }}>${ing.cost_per_unit.toLocaleString()}</span>
-                      <button 
-                        onClick={() => {
-                          setEditingIngredientId(ing.id);
-                          setEditCost(ing.cost_per_unit.toString());
-                        }}
-                        style={{ color: '#666' }}
-                      >
-                        <Edit size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
       )}
@@ -424,6 +317,7 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
         <ProductForm
           onClose={() => setIsProductFormOpen(false)}
           onSuccess={fetchData}
+          productId={editingProductId}
         />
       )}
 
@@ -431,7 +325,6 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
         <IngredientForm
           onClose={() => setIsIngredientFormOpen(false)}
           onSuccess={fetchData}
-          productId={editingProductId} // Pass product ID if editing
         />
       )}
     </div>
