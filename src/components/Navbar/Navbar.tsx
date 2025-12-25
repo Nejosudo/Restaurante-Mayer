@@ -21,16 +21,32 @@ const CATEGORIES = [
 export default function Navbar() {
   const { count, toggleCart } = useCart();
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
+    const fetchRole = async (userId: string) => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      setRole(data?.role || 'client');
+    };
+
     // Check active session
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
+      if (user) fetchRole(user.id);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchRole(session.user.id);
+      } else {
+        setRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -55,7 +71,10 @@ export default function Navbar() {
 
         <div className={styles.actions}>
           {user ? (
-            <Link href="/dashboard/client" className="btn btn-primary">
+            <Link 
+              href={role === 'admin' ? '/dashboard/admin' : '/dashboard/client'} 
+              className="btn btn-primary"
+            >
               <LayoutDashboard size={18} style={{ marginRight: '8px' }} />
               Dashboard
             </Link>

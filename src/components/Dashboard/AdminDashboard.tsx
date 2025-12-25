@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, ShoppingBag, LogOut, Plus, Edit, Trash } from 'lucide-react';
+import { Package, ShoppingBag, LogOut, Settings, ChefHat } from 'lucide-react'; // Added Settings, ChefHat for Ingredients
 import { supabase } from '@/lib/supabaseClient';
-import styles from './Dashboard.module.css'; // Reusing dashboard styles
+import styles from './Dashboard.module.css';
 import InventoryTab from './Inventory/InventoryTab';
+import ConfigurationTab from './Configuration/ConfigurationTab';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('products');
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tabVisibility, setTabVisibility] = useState<any>({ products: true, ingredients: true, orders: true });
   const router = useRouter();
 
   useEffect(() => {
@@ -31,6 +33,17 @@ export default function AdminDashboard() {
         alert('Acceso denegado. Se requiere rol de administrador.');
         router.push('/');
         return;
+      }
+
+      // Fetch tab settings
+      const { data: config } = await supabase
+        .from('configurations')
+        .select('value')
+        .eq('key', 'general.tab_visibility')
+        .single();
+      
+      if (config?.value) {
+        setTabVisibility(config.value);
       }
 
       setIsAdmin(true);
@@ -55,18 +68,40 @@ export default function AdminDashboard() {
           Panel Admin
         </div>
         <ul className={styles.menu}>
+          {tabVisibility.products && (
+            <li 
+              className={`${styles.menuItem} ${activeTab === 'products' ? styles.active : ''}`}
+              onClick={() => setActiveTab('products')}
+            >
+              <Package size={20} /> Productos
+            </li>
+          )}
+          
+          {tabVisibility.ingredients && (
+            <li 
+              className={`${styles.menuItem} ${activeTab === 'ingredients' ? styles.active : ''}`}
+              onClick={() => setActiveTab('ingredients')}
+            >
+              <ChefHat size={20} /> Ingredientes
+            </li>
+          )}
+
+          {tabVisibility.orders && (
+            <li 
+              className={`${styles.menuItem} ${activeTab === 'orders' ? styles.active : ''}`}
+              onClick={() => setActiveTab('orders')}
+            >
+              <ShoppingBag size={20} /> Pedidos
+            </li>
+          )}
+
           <li 
-            className={`${styles.menuItem} ${activeTab === 'products' ? styles.active : ''}`}
-            onClick={() => setActiveTab('products')}
+            className={`${styles.menuItem} ${activeTab === 'configuration' ? styles.active : ''}`}
+            onClick={() => setActiveTab('configuration')}
           >
-            <Package size={20} /> Inventario
+            <Settings size={20} /> Configuraciones
           </li>
-          <li 
-            className={`${styles.menuItem} ${activeTab === 'orders' ? styles.active : ''}`}
-            onClick={() => setActiveTab('orders')}
-          >
-            <ShoppingBag size={20} /> Pedidos
-          </li>
+
           <li className={styles.menuItem} onClick={handleLogout} style={{ marginTop: 'auto', color: 'var(--error)' }}>
             <LogOut size={20} /> Cerrar Sesión
           </li>
@@ -74,8 +109,10 @@ export default function AdminDashboard() {
       </aside>
 
       <main className={styles.content}>
-        {activeTab === 'products' && <InventoryTab />}
+        {activeTab === 'products' && <InventoryTab mode="products" />}
+        {activeTab === 'ingredients' && <InventoryTab mode="ingredients" />}
         {activeTab === 'orders' && <OrdersTab />}
+        {activeTab === 'configuration' && <ConfigurationTab />}
       </main>
     </div>
   );
@@ -143,3 +180,4 @@ function OrdersTab() {
     </div>
   );
 }
+
