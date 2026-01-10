@@ -25,9 +25,9 @@ export default function LoginForm() {
       });
 
       if (error) throw error;
-
+      
+      router.refresh(); 
       router.push('/dashboard/client');
-      router.refresh();
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
     } finally {

@@ -4,9 +4,7 @@ import Link from 'next/link';
 import { ShoppingCart, User, LayoutDashboard } from 'lucide-react';
 import styles from './Navbar.module.css';
 import { useCart } from '@/context/CartContext';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+import { useAuth } from '@/context/AuthContext';
 
 const CATEGORIES = [
   { name: 'Todos', href: '/' },
@@ -20,37 +18,10 @@ const CATEGORIES = [
 
 export default function Navbar() {
   const { count, toggleCart } = useCart();
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchRole = async (userId: string) => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      setRole(data?.role || 'client');
-    };
-
-    // Check active session
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-      if (user) fetchRole(user.id);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRole(session.user.id);
-      } else {
-        setRole(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { user, profile } = useAuth();
+  
+  // Role is now derived from the global context profile
+  const role = profile?.role;
 
   return (
     <header className={styles.header}>

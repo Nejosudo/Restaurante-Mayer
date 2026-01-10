@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Plus, Trash, Calculator, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Plus, Trash, Calculator, Save, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Category, Ingredient, Configuration } from '@/types';
 import styles from '../Dashboard.module.css';
@@ -34,10 +34,18 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
   const [materialRows, setMaterialRows] = useState<{ ingredientId: string, qty: number }[]>([]);
 
   // -- 4. Mfg Expenses --
-  const [expenseRows, setExpenseRows] = useState<{ type: string, unit: string, qty: number, cost: number }[]>([]);
+  // sourceKey is optional: if present and !== 'custom', it links to a config
+  const [expenseRows, setExpenseRows] = useState<{ type: string, unit: string, qty: number, cost: number, sourceKey?: string }[]>([]);
 
   // -- 5. Pricing --
   const [salePrice, setSalePrice] = useState<string>('0');
+
+  // -- 6. Duplicate Handling --
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
+  
+  // -- 7. Configs for Selection --
+  const [manufacturingOptions, setManufacturingOptions] = useState<Configuration[]>([]);
 
   useEffect(() => {
     fetchInitialData();
@@ -58,6 +66,10 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
       const configMap: any = {};
       confs.data.forEach(c => configMap[c.key] = c.value);
       setConfigs(configMap);
+      
+      // Filter for dropdown options
+      const mfg = confs.data.filter(c => c.category === 'manufacturing');
+      setManufacturingOptions(mfg);
     }
 
     // IF EDITING: Fetch detailed product data
@@ -97,15 +109,30 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
             })));
         }
         if (prod.product_expenses) {
-            setExpenseRows(prod.product_expenses.map((e: any) => ({
-                type: e.expense_type,
-                unit: e.unit,
-                qty: e.qty_used,
-                cost: e.unit_cost
-            })));
+            // Try to match existing expenses to configs to restore state
+            const mfgConfigs = confs.data?.filter((c:any) => c.category === 'manufacturing') || [];
+            
+            setExpenseRows(prod.product_expenses.map((e: any) => {
+                const matched = mfgConfigs.find((c:any) => c.label === e.expense_type);
+                return {
+                    type: e.expense_type,
+                    unit: e.unit,
+                    qty: e.qty_used,
+                    cost: e.unit_cost,
+                    sourceKey: matched ? matched.key : 'custom'
+                };
+            }));
         }
       }
     }
+  };
+
+  const inferUnit = (key: string) => {
+    const k = key.toLowerCase();
+    if (k.includes('luz') || k.includes('energ') || k.includes('elect')) return 'Kwh';
+    if (k.includes('agua') || k.includes('water') || k.includes('acue')) return 'm3';
+    if (k.includes('gas')) return 'm3';
+    return '';
   };
 
   // --- CALCULATIONS ---
@@ -169,8 +196,56 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
   const margin = Number(salePrice || 0) > 0 ? ((Number(salePrice || 0) - unitCost) / Number(salePrice || 1)) * 100 : 0;
 
   // --- HANDLERS ---
-  const handleSubmit = async () => {
+  // --- HANDLERS ---
+  const handleSubmit = async (e?: React.FormEvent, forceMerge: boolean = false) => {
+    // Check for duplicate ingredients if not forcing merge
+    if (!forceMerge) {
+      const distinctIds = new Set<string>();
+      const duplicates = new Set<string>();
+      
+      for (const row of materialRows) {
+        if (row.ingredientId) {
+          if (distinctIds.has(row.ingredientId)) {
+            duplicates.add(row.ingredientId);
+          } else {
+            distinctIds.add(row.ingredientId);
+          }
+        }
+      }
+
+      if (duplicates.size > 0) {
+        const names = Array.from(duplicates).map(id => ingredients.find(i => i.id === id)?.name || 'Desconocido');
+        setDuplicateNames(names);
+        setShowDuplicateModal(true);
+        return;
+      }
+    }
+
     setLoading(true);
+    
+    // Prepare rows (merge if forced/needed, though if we are here via forceMerge, we should use the merged state... 
+    // actually, simpler: calculate merged rows here if forceMerge is true OR just rely on the caller to update state?
+    // Let's rely on the helper to update state before calling this if needed, OR do it here.
+    // Logic: If forceMerge, we merge materialRows locally for the DB insert.
+    
+    let currentMaterialRows = [...materialRows];
+    if (forceMerge) {
+      const mergedMap = new Map<string, number>();
+      currentMaterialRows.forEach(row => {
+        if (!row.ingredientId) return;
+        const current = mergedMap.get(row.ingredientId) || 0;
+        mergedMap.set(row.ingredientId, current + row.qty);
+      });
+      
+      currentMaterialRows = Array.from(mergedMap.entries()).map(([id, qty]) => ({
+        ingredientId: id,
+        qty
+      }));
+       
+       // Also update the UI state so the user sees the merge happened
+       setMaterialRows(currentMaterialRows);
+    }
+
     try {
       let currentProductId = productId;
 
@@ -205,8 +280,8 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
           product_id: currentProductId, role_name: r.role, qty_staff: r.qty, base_salary: r.salary
         })));
       }
-      if (materialRows.length > 0) {
-        await supabase.from('product_ingredients').insert(materialRows.map(r => ({
+      if (currentMaterialRows.length > 0) {
+        await supabase.from('product_ingredients').insert(currentMaterialRows.map(r => ({
           product_id: currentProductId, ingredient_id: r.ingredientId, quantity_needed: r.qty 
         })));
       }
@@ -220,15 +295,18 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
       onSuccess();
       onClose();
     } catch (err: any) {
+      console.error(err);
       alert('Error: ' + err.message);
     } finally {
       setLoading(false);
+      setShowDuplicateModal(false);
     }
   };
 
   const addLabor = () => setLaborRows([...laborRows, { role: '', qty: 1, salary: Number(configs['labor.min_wage'] || 0) }]);
   const addMaterial = () => setMaterialRows([...materialRows, { ingredientId: '', qty: 0 }]);
-  const addExpense = () => setExpenseRows([...expenseRows, { type: '', unit: '', qty: 0, cost: 0 }]);
+
+  const addExpense = () => setExpenseRows([...expenseRows, { type: '', unit: '', qty: 0, cost: 0, sourceKey: '' }]);
 
   return (
     <div className={styles.overlay}>
@@ -493,16 +571,60 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
                         <td>
-                          <input className={styles.input} placeholder="Ej. Energía"
-                            value={row.type} onChange={e => {
-                              const newRows = [...expenseRows];
-                              newRows[i].type = e.target.value;
-                              setExpenseRows(newRows);
-                            }}
-                          />
+                          {row.sourceKey === 'custom' ? (
+                            <div style={{ display: 'flex', gap: '0.25rem' }}>
+                              <input className={styles.input} placeholder="Manual..."
+                                value={row.type} onChange={e => {
+                                  const newRows = [...expenseRows];
+                                  newRows[i].type = e.target.value;
+                                  setExpenseRows(newRows);
+                                }}
+                                autoFocus 
+                              />
+                              <button className="btn btn-outline" style={{ padding: '0 5px' }} title="Volver a lista"
+                                onClick={() => {
+                                    const newRows = [...expenseRows];
+                                    newRows[i].sourceKey = ''; // reset to select
+                                    newRows[i].type = '';
+                                    setExpenseRows(newRows);
+                                }}>
+                                <ChevronDown size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <select 
+                              className={styles.input}
+                              value={row.sourceKey || ''}
+                              onChange={e => {
+                                  const val = e.target.value;
+                                  const newRows = [...expenseRows];
+                                  newRows[i].sourceKey = val;
+                                  
+                                  if (val === 'custom') {
+                                      newRows[i].type = '';
+                                      newRows[i].unit = '';
+                                      newRows[i].cost = 0;
+                                  } else {
+                                      const cfg = manufacturingOptions.find(c => c.key === val);
+                                      if (cfg) {
+                                          newRows[i].type = cfg.label;
+                                          newRows[i].cost = Number(cfg.value || 0);
+                                          newRows[i].unit = inferUnit(cfg.key);
+                                      }
+                                  }
+                                  setExpenseRows(newRows);
+                              }}
+                            >
+                              <option value="">Seleccione Gasto...</option>
+                              {manufacturingOptions.map(opt => (
+                                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                              ))}
+                              <option value="custom">-- Otro Gasto (Manual) --</option>
+                            </select>
+                          )}
                         </td>
                         <td>
-                          <input className={styles.input} placeholder="Kw" style={{ width: 60 }}
+                          <input className={styles.input} placeholder="Unidad" style={{ width: 60 }}
                             value={row.unit} onChange={e => {
                               const newRows = [...expenseRows];
                               newRows[i].unit = e.target.value;
@@ -562,10 +684,42 @@ export default function ProductForm({ onClose, onSuccess, productId }: ProductFo
         {/* Footer */}
         <div style={{ padding: '1rem', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
           <button className="btn" onClick={onClose} disabled={loading}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
+          <button className="btn btn-primary" onClick={() => handleSubmit()} disabled={loading}>
             {loading ? 'Guardando...' : 'Guardar Producto y Costos'}
           </button>
         </div>
+
+        {/* Duplicate Warning Modal */}
+        {showDuplicateModal && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <div style={{
+              backgroundColor: 'white', padding: '2rem', borderRadius: '8px',
+              maxWidth: '500px', width: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', color: '#f59e0b' }}>
+                <AlertTriangle size={32} />
+                <h3 style={{ margin: 0, color: '#333' }}>Ingredientes Duplicados</h3>
+              </div>
+              <p>Se han encontrado los siguientes ingredientes repetidos:</p>
+              <ul style={{ backgroundColor: '#fffbe6', padding: '1rem', borderRadius: '4px', listStylePosition: 'inside' }}>
+                {duplicateNames.map((name, i) => <li key={i}>{name}</li>)}
+              </ul>
+              <p>¿Qué desea hacer?</p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                <button className="btn" onClick={() => setShowDuplicateModal(false)}>
+                  Modificar
+                </button>
+                <button className="btn btn-primary" onClick={() => handleSubmit(undefined, true)}>
+                  Continuar de todos modos
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

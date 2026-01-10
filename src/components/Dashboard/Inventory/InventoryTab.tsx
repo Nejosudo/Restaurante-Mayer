@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash, Save, X, ChefHat } from 'lucide-react';
+import { Plus, Edit, Trash, Save, X, ChefHat, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Product, Ingredient } from '@/types';
 import styles from '../Dashboard.module.css';
@@ -150,6 +150,24 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
     setIsProductFormOpen(true);
   };
 
+  const handleToggleVisibility = async (product: any) => {
+    const newStatus = !product.is_available;
+    const { error } = await supabase
+      .from('products')
+      .update({ is_available: newStatus })
+      .eq('id', product.id);
+
+    if (error) {
+      alert('Error al actualizar visibilidad: ' + error.message);
+    } else {
+      // Optimistic update or refetch
+      const updatedProducts = products.map(p => 
+        p.id === product.id ? { ...p, is_available: newStatus } : p
+      );
+      setProducts(updatedProducts);
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
       {/* Products Column */}
@@ -201,6 +219,17 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
                 >
                   <Trash size={16} />
                 </button>
+                <button 
+                  className={styles.qtyBtn} 
+                  style={{ 
+                    color: product.is_available ? 'green' : 'red', 
+                    borderColor: product.is_available ? 'green' : 'red' 
+                  }}
+                  onClick={() => handleToggleVisibility(product)}
+                  title={product.is_available ? "Visible (Click para ocultar)" : "Oculto (Click para mostrar)"}
+                >
+                  <Eye size={16} />
+                </button>
               </div>
             </div>
           ))}
@@ -238,6 +267,7 @@ export default function InventoryTab({ mode = 'products' }: InventoryTabProps) {
                     >
                       <option value="gramo">gramo</option>
                       <option value="mililitro">mililitro</option>
+                      <option value="unidad">unidad</option>
                       {/* <option value="kilo">kilogramo</option> */}
                       {/* <option value="litro">litro</option> */}
                     </select>
